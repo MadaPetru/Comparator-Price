@@ -1,0 +1,53 @@
+version: '3.8'
+services:
+  db-comparator-prices:
+    container_name: db-comparator-prices
+    image: postgres:14.1-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=adi
+      - POSTGRES_PASSWORD=adi
+      - POSTGRES_DB=db-comparator-prices
+    ports:
+      - '5432:5432'
+    volumes:
+      - db:/var/lib/postgresql/data
+  sonarqube:
+    image: sonarqube:community
+    hostname: sonarqube
+    container_name: sonarqube
+    depends_on:
+      - db
+    environment:
+      - SONAR_JDBC_URL=jdbc:postgresql://db:5432/sonar
+      - SONAR_JDBC_USERNAME=sonar
+      - SONAR_JDBC_PASSWORD=sonar
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    ports:
+      - '9000:9000'
+  db:
+    image: postgres:13
+    hostname: postgresql
+    container_name: sonarqube_db
+    environment:
+      - POSTGRES_USER=sonar
+      - POSTGRES_PASSWORD=sonar
+      - POSTGRES_DB=sonar
+    volumes:
+      - postgresql:/var/lib/postgresql
+      - postgresql_data:/var/lib/postgresql/data
+    ports:
+      - '5433:5432'
+
+volumes:
+  db:
+    name: db-comparator-prices-volume
+    driver: local
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+  postgresql:
+  postgresql_data:
