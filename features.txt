@@ -1,0 +1,1 @@
+COMPARATORPRICES-0001 = add security jwt
