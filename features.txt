@@ -1,1 +1,2 @@
 COMPARATORPRICES-0001 = add security jwt
+COMPARATORPRICES-0002 = repair readMe file
