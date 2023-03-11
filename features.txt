@@ -2,3 +2,4 @@ COMPARATORPRICES-0001 = add security jwt
 COMPARATORPRICES-0002 = repair readMe file
 COMPARATORPRICES-0003 = enable cors origin request for front end
 COMPARATORPRICES-0004 = implement search functionality
+COMPARATORPRICES-0005 = try to improve the consume of results fro sites and the searches on strings
