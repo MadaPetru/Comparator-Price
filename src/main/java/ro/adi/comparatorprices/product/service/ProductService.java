@@ -3,14 +3,15 @@ package ro.adi.comparatorprices.product.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import ro.adi.comparatorprices.collections.PairLinkProduct;
 import ro.adi.comparatorprices.product.constants.SitesUrls;
 import ro.adi.comparatorprices.product.dto.request.ProductRequestDto;
 import ro.adi.comparatorprices.product.dto.response.ProductResponseDto;
 import ro.adi.comparatorprices.product.sites.SiteHelperFactory;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -18,59 +19,60 @@ public class ProductService {
 
     private final RestTemplate restTemplate;
     private final SiteHelperFactory siteHelperFactory;
-    private Map<SitesUrls, String> mainUrlsToSearchProductsMapBySite;
-    private Map<SitesUrls, String> resultsFromUrlsOfTheMainPageMapBySite;
-    private HashMap<SitesUrls, ArrayList<String>> urlsWithPageMapBySite;
-    private HashMap<SitesUrls, List<String>> resultsFromUrlsWithPageMapBySite;
-    private HashMap<SitesUrls, List<String>> resultsFromUrlsWithPageAndMainUrlsMapBySite;
+    private EnumMap<SitesUrls, String> mainUrlsToSearchProductsMapBySite = new EnumMap<>(SitesUrls.class);
+    private EnumMap<SitesUrls, String> resultsFromUrlsOfTheMainPageMapBySite = new EnumMap<>(SitesUrls.class);
+    private EnumMap<SitesUrls, String> urlsMapBySiteFromDesiredPage = new EnumMap<>(SitesUrls.class);
+    private EnumMap<SitesUrls, String> resultsFromUrlsWithPageMapBySite = new EnumMap<>(SitesUrls.class);
+    private EnumMap<SitesUrls, List<String>> resultsFromUrlsWithPageAndMainUrlsMapBySite = new EnumMap<>(SitesUrls.class);
 
-    public List<ProductResponseDto> getAllProductsWithSpecificCharacteristics(ProductRequestDto requestDto)
-            throws Exception {
+    public List<ProductResponseDto> getAllProductsWithSpecificCharacteristics(ProductRequestDto requestDto) {
 
-        mainUrlsToSearchProductsMapBySite = generateAllUrlsSearchProducts(requestDto);
-        try {
-            resultsFromUrlsOfTheMainPageMapBySite = getResultsFromUrlsOfTheMainPageOfSites();
-            urlsWithPageMapBySite = getUrlsWithPageMapBySite();
-            resultsFromUrlsWithPageMapBySite = getResultsFromUrlsWithPage();
-            resultsFromUrlsWithPageAndMainUrlsMapBySite = getResultsFromUrlsWithPageAndMainPageMapBySite();
-            return getProductsFromResults();
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            throw new Exception("");
-        }
+        setResultsFromUrlsBasedOnRequestedPage(requestDto);
+        resultsFromUrlsWithPageAndMainUrlsMapBySite = getResultsFromUrlsWithPageAndMainPageMapBySite();
+        return getProductsFromResults();
     }
 
-    private HashMap<SitesUrls, List<String>> getResultsFromUrlsWithPageAndMainPageMapBySite() {
+    private void setResultsFromUrlsBasedOnRequestedPage(ProductRequestDto requestDto) {
 
-        var resultsFromUrlsWithPageAndMainUrlsMapBySite = new HashMap<SitesUrls, List<String>>();
+        var page = requestDto.getPageable().getPage();
+        if (page == 0) {
+            mainUrlsToSearchProductsMapBySite = generateAllUrlsSearchProducts(requestDto);
+            resultsFromUrlsOfTheMainPageMapBySite = getResultsFromUrlsOfTheMainPageOfSites();
+            return;
+        }
+        urlsMapBySiteFromDesiredPage = getUrlsMapBySiteWithPageFromRequest(page);
+        resultsFromUrlsWithPageMapBySite = getResultsFromUrlsWithPage();
+    }
+
+    private EnumMap<SitesUrls, List<String>> getResultsFromUrlsWithPageAndMainPageMapBySite() {
+
+        var results = new EnumMap<SitesUrls, List<String>>(SitesUrls.class);
         for (var entry : resultsFromUrlsOfTheMainPageMapBySite.entrySet()) {
-            resultsFromUrlsWithPageAndMainUrlsMapBySite.put(entry.getKey(),
+            results.put(entry.getKey(),
                     Collections.singletonList(entry.getValue()));
         }
         for (var entry : resultsFromUrlsWithPageMapBySite.entrySet()) {
-            resultsFromUrlsWithPageAndMainUrlsMapBySite.put(entry.getKey(), entry.getValue());
+            results.put(entry.getKey(), Collections.singletonList(entry.getValue()));
         }
 
-        return resultsFromUrlsWithPageAndMainUrlsMapBySite;
+        return results;
     }
 
-    private HashMap<SitesUrls, List<String>> getResultsFromUrlsWithPage() {
+    private EnumMap<SitesUrls, String> getResultsFromUrlsWithPage() {
 
-        var resultsFromUrlsWithPageMapBySite = new HashMap<SitesUrls, List<String>>();
-        for (var urlWithPageMapBySite : urlsWithPageMapBySite.entrySet()) {
+        var results = new EnumMap<SitesUrls, String>(SitesUrls.class);
+        for (var urlWithPageMapBySite : urlsMapBySiteFromDesiredPage.entrySet()) {
             var site = urlWithPageMapBySite.getKey();
-            var urlsWithPage = urlWithPageMapBySite.getValue();
-            var result = urlsWithPage.stream().map(url -> restTemplate.getForObject(url, String.class))
-                    .collect(Collectors.toList());
-            resultsFromUrlsWithPageMapBySite.put(site, result);
+            var url = urlWithPageMapBySite.getValue();
+            var result = restTemplate.getForObject(url, String.class);
+            results.put(site, result);
         }
-
-        return resultsFromUrlsWithPageMapBySite;
+        return results;
     }
 
-    private Map<SitesUrls, String> getResultsFromUrlsOfTheMainPageOfSites() {
+    private EnumMap<SitesUrls, String> getResultsFromUrlsOfTheMainPageOfSites() {
 
-        Map<SitesUrls, String> resultsFromUrlsOfTheMainPageMapSite = new HashMap<>();
+        var resultsFromUrlsOfTheMainPageMapSite = new EnumMap<SitesUrls, String>(SitesUrls.class);
         for (var urlSiteMapBySite : mainUrlsToSearchProductsMapBySite.entrySet()) {
             var key = urlSiteMapBySite.getKey();
             var urlOfTheMainPage = urlSiteMapBySite.getValue();
@@ -82,33 +84,23 @@ public class ProductService {
     private List<ProductResponseDto> getProductsFromResults() {
 
         List<ProductResponseDto> allProducts = new ArrayList<>();
-        var linksMapBySite = getProductsLinksMapBySite();
-        for (var linksMapBySiteEntry : linksMapBySite.entrySet()) {
-            var links = linksMapBySiteEntry.getValue();
-            var site = linksMapBySiteEntry.getKey();
-            var products = getProductsFromSite(links, site);
-            allProducts.addAll(products);
+        for (var resultMapBySite : resultsFromUrlsWithPageAndMainUrlsMapBySite.entrySet()) {
+            var site = resultMapBySite.getKey();
+            var results = resultMapBySite.getValue();
+            allProducts.addAll(siteHelperFactory.createCorrespondentSiteHelper(site).getProducts(results));
         }
         return allProducts;
     }
 
-    private List<ProductResponseDto> getProductsFromSite(Set<String> links, SitesUrls site) {
+    private EnumMap<SitesUrls, String> generateAllUrlsSearchProducts(ProductRequestDto requestDto) {
 
-        return links.stream().map(link -> new PairLinkProduct(link, restTemplate.getForObject(link, String.class)))
-                .map(linkResultPairLinkProduct -> siteHelperFactory.createCorrespondentSiteHelper(site)
-                        .getProductDto(linkResultPairLinkProduct.getLink(), linkResultPairLinkProduct.getResult()))
-                .collect(Collectors.toList());
-    }
-
-    private HashMap<SitesUrls, String> generateAllUrlsSearchProducts(ProductRequestDto requestDto) {
         var siteEnums = SitesUrls.values();
-        var urlsToSearchProductsByHisSite = new HashMap<SitesUrls, String>();
+        var urlsToSearchProductsByHisSite = new EnumMap<SitesUrls, String>(SitesUrls.class);
         for (var site : siteEnums) {
             var urlSite = SitesUrls.getUrlByEnum(site);
             var urlCreatedBasedOnRequest = getUrlCreatedBasedOnRequest(requestDto, urlSite, site);
             urlsToSearchProductsByHisSite.put(site, urlCreatedBasedOnRequest);
         }
-
         return urlsToSearchProductsByHisSite;
     }
 
@@ -116,41 +108,22 @@ public class ProductService {
         return siteHelperFactory.createCorrespondentSiteHelper(site).getUrlCreatedBasedOnRequest(requestDto, url);
     }
 
-    private HashMap<SitesUrls, Set<String>> getProductsLinksMapBySite() {
+    private EnumMap<SitesUrls, String> getUrlsMapBySiteWithPageFromRequest(int page) {
 
-        var linksMapBySite = new HashMap<SitesUrls, Set<String>>();
-        for (var resultsMapBySite : resultsFromUrlsWithPageAndMainUrlsMapBySite.entrySet()) {
-            var site = resultsMapBySite.getKey();
-            var results = resultsMapBySite.getValue();
-            var links = siteHelperFactory.createCorrespondentSiteHelper(site).getProductsLinks(results);
-            linksMapBySite.put(site, links);
-        }
-
-        return linksMapBySite;
-    }
-
-    private HashMap<SitesUrls, ArrayList<String>> getUrlsWithPageMapBySite() {
-
-        var urlsWithPageMapBySite = new HashMap<SitesUrls, ArrayList<String>>();
+        var urls = new EnumMap<SitesUrls, String>(SitesUrls.class);
         for (var mainUrlMapBySite : mainUrlsToSearchProductsMapBySite.entrySet()) {
 
             var mainUrl = mainUrlMapBySite.getValue();
             var site = mainUrlMapBySite.getKey();
-            var urlsWithPage = getUrlsWithPages(mainUrl, site);
-            urlsWithPageMapBySite.put(site, urlsWithPage);
+            var urlsWithPage = getUrlsWithDesiredPageFromRequest(mainUrl, site, page);
+            urls.put(site, urlsWithPage);
         }
 
-        return urlsWithPageMapBySite;
+        return urls;
     }
 
-    private ArrayList<String> getUrlsWithPages(String mainUrl, SitesUrls site) {
+    private String getUrlsWithDesiredPageFromRequest(String mainUrl, SitesUrls site, int page) {
 
-        var resultsOfMainPageAfterSite = resultsFromUrlsOfTheMainPageMapBySite.get(site);
-        int totalPages = getTotalPages(resultsOfMainPageAfterSite, site);
-        return siteHelperFactory.createCorrespondentSiteHelper(site).getUrlsWithPage(totalPages, mainUrl);
-    }
-
-    private int getTotalPages(String result, SitesUrls urlEnum) {
-        return siteHelperFactory.createCorrespondentSiteHelper(urlEnum).getTotalPages(result);
+        return siteHelperFactory.createCorrespondentSiteHelper(site).getUrlsWithPage(mainUrl, page);
     }
 }
